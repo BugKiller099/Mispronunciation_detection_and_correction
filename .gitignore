@@ -1,0 +1,71 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# ---- Virtual Environment ----
+env/
+venv/
+.newenv/
+newenv/
+*.env
+
+# ---- Jupyter / IPython ----
+.ipynb_checkpoints/
+
+# ---- Logs ----
+logs/
+logstensorboard/
+*.log
+
+# ---- Model Outputs ----
+models/
+modelsbest_model/
+modelscheckpoints/
+results/
+*.ckpt
+*.pth
+*.pt
+*.h5
+
+# ---- Data Directories ----
+data/
+dataraw/
+dataprocessed/
+dataset/
+*.wav
+*.mp3
+*.flac
+*.jsonl
+
+# ---- Temporary / Cache ----
+tmp/
+temp/
+.cache/
+*.cache
+*.tmp
+
+# ---- Build / Packaging ----
+build/
+dist/
+*.egg-info/
+*.egg
+
+# ---- OS / Editors ----
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ---- Pip Downloads ----
+pip-wheel-metadata/
+pip-selfcheck.json
+
+# ---- Misc ----
+*.zip
+*.tar
+*.tar.gz
+*.pickle
+*.pkl
