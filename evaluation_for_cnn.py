@@ -100,11 +100,16 @@ class Evaluator:
         
         # Classification report
         class_names = ['Poor', 'Acceptable', 'Good']
+        # Define all possible labels (0, 1, 2) explicitly
+        all_possible_labels = [0, 1, 2] 
+        
         report = classification_report(
             all_labels, 
             all_predictions,
             target_names=class_names,
-            output_dict=True
+            labels=all_possible_labels,  # <--- THIS IS THE CRITICAL ADDITION
+            output_dict=True,
+            zero_division=0 # Optional: prevents warning if a class has 0 support/precision
         )
         
         # Score regression metrics

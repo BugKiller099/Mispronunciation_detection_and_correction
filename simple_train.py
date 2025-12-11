@@ -300,60 +300,60 @@ class SimpleTrainer:
 # Main Function
 # ============================================================================
 
+# ============================================================================
+# Main Function - CORRECTED
+# ============================================================================
+
 def main():
     """Main function"""
     config = Config()
     config.create_directories()
     
-    # Load preprocessed data
-    data_file = config.PROCESSED_DATA_DIR / "preprocessed_data.pt"
+    # Define the new, correct file paths
+    train_val_file = config.PROCESSED_DATA_DIR / "preprocessed_train_val_data.pt"
+    test_file = config.PROCESSED_DATA_DIR / "preprocessed_test_data.pt"
     
-    if not data_file.exists():
-        print(f"✗ Preprocessed data not found: {data_file}")
-        print("Please run preprocessing.py first!")
+    if not train_val_file.exists() or not test_file.exists():
+        print(f"✗ Correct preprocessed files not found.")
+        print(f"Required files: {train_val_file.name} and {test_file.name}")
+        print("Please ensure you run preprocessing.py first!")
         return
     
     print(f"\n{'='*70}")
     print("LOADING DATA")
     print(f"{'='*70}")
-    print(f"Loading from: {data_file}")
     
-    all_data = torch.load(data_file)
-    print(f"✓ Loaded {len(all_data)} samples")
+    # Load the TRULY separated train/val and test data
+    print(f"Loading Training/Validation data from: {train_val_file.name}")
+    train_val_data = torch.load(train_val_file)
     
-    # Split data
+    print(f"Loading Test data from: {test_file.name}")
+    test_data = torch.load(test_file)
+    
+    print(f"✓ Loaded total samples: {len(train_val_data) + len(test_data)}")
+    
+    # Now, split the train_val_data into TRAIN and VALIDATION
+    # The Test set is already correctly loaded.
     from sklearn.model_selection import train_test_split
     
-    # Get train/test split
-    train_data = [d for d in all_data if d.get('split') == 'train']
-    test_data = [d for d in all_data if d.get('split') == 'test']
-    
-    # If no split exists, create one
-    if not train_data:
-        labels = [d['label'] for d in all_data]
-        train_data, test_data = train_test_split(
-            all_data,
-            test_size=0.2,
-            random_state=config.SEED,
-            stratify=labels
-        )
-    
-    # Split train into train and validation
-    if len(train_data) > 10:
-        train_labels = [d['label'] for d in train_data]
+    # Split train_val_data into actual train and validation sets
+    if len(train_val_data) > 10:
+        train_labels = [d['label'] for d in train_val_data]
         train_data, val_data = train_test_split(
-            train_data,
+            train_val_data,
             test_size=0.15,
             random_state=config.SEED,
             stratify=train_labels
         )
     else:
+        # Fallback for small datasets (though shouldn't happen here)
+        train_data = train_val_data
         val_data = test_data
     
     print(f"\nData splits:")
     print(f"  Train: {len(train_data)}")
     print(f"  Val:   {len(val_data)}")
-    print(f"  Test:  {len(test_data)}")
+    print(f"  Test:  {len(test_data)}") # Test data is now non-zero!
     
     # Create datasets
     train_dataset = SimpleDataset(train_data)
@@ -382,3 +382,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+

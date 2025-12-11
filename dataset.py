@@ -154,72 +154,67 @@ class MispronunciationDataset(Dataset):
             'score': torch.tensor(sample['overall_score'], dtype=torch.float)
         }
 
+# ============================================================================
+# dataset.py - FULLY CORRECTED create_dataloaders function
+# ============================================================================
+
 def create_dataloaders(config=None):
     """
-    Create train, validation, and test dataloaders.
-    
-    Returns:
-        Tuple of (train_loader, val_loader, test_loader)
+    Create train, validation, and test dataloaders from the separate .pt files.
     """
     config = config or Config()
     
-    # Load preprocessed data
-    data_file = config.PROCESSED_DATA_DIR / "preprocessed_data.pt"
+    # 1. Define the correct separate file paths
+    train_val_file = config.PROCESSED_DATA_DIR / "preprocessed_train_val_data.pt"
+    test_file = config.PROCESSED_DATA_DIR / "preprocessed_test_data.pt"
     
-    if not data_file.exists():
+    if not train_val_file.exists() or not test_file.exists():
         raise FileNotFoundError(
-            f"Preprocessed data not found at {data_file}. "
-            "Please run preprocessing.py first."
+            "Preprocessed data not found. Required files are missing. "
+            f"Please run preprocessing.py first to create: {train_val_file.name} and {test_file.name}"
         )
     
-    print("Loading preprocessed data...")
-    all_data = torch.load(data_file)
-    print(f"✓ Loaded {len(all_data)} samples")
+    print("Loading preprocessed data from separate files...")
     
-    # Split by existing 'split' field if available
-    train_data = [d for d in all_data if d.get('split') == 'train']
-    test_data = [d for d in all_data if d.get('split') == 'test']
+    # 2. Load the TRULY separated train/val and dedicated test data
+    train_val_data = torch.load(train_val_file)
+    test_data = torch.load(test_file)
     
-    # If no train/test split exists, create one
-    if not train_data:
-        print("No train/test split found. Creating 80/20 split...")
-        labels = [d['label'] for d in all_data]
-        train_data, test_data = train_test_split(
-            all_data,
-            test_size=0.2,
-            random_state=config.SEED,
-            stratify=labels
-        )
+    # Now, split the train_val_data into actual TRAIN and VALIDATION
+    from sklearn.model_selection import train_test_split
     
-    # Further split train into train and validation
-    if len(train_data) > 10:  # Only split if we have enough data
-        train_labels = [d['label'] for d in train_data]
+    if len(train_val_data) > 10:
+        # Split the training block into training and validation sets
+        train_labels = [d['label'] for d in train_val_data]
         train_data, val_data = train_test_split(
-            train_data,
-            test_size=0.15,  # 15% of training for validation
+            train_val_data,
+            test_size=0.15,  # 15% of the initial block for validation
             random_state=config.SEED,
             stratify=train_labels
         )
     else:
-        val_data = test_data  # Use test as validation if too little data
+        # Fallback (should not happen with your data)
+        train_data = train_val_data
+        val_data = test_data 
     
-    # Create datasets
+    # 3. Create datasets (Test data is now correctly populated!)
     print(f"\nSplit sizes:")
     print(f"  Train: {len(train_data)}")
     print(f"  Val:   {len(val_data)}")
     print(f"  Test:  {len(test_data)}")
     
+    # Assuming MispronunciationDataset is defined elsewhere
     train_dataset = MispronunciationDataset(train_data, config=config)
     val_dataset = MispronunciationDataset(val_data, config=config)
     test_dataset = MispronunciationDataset(test_data, config=config)
     
-    # Create dataloaders
+    # 4. Create dataloaders
     train_loader = DataLoader(
         train_dataset,
         batch_size=config.BATCH_SIZE,
         shuffle=True,
-        num_workers=0,  # Set to 0 to avoid multiprocessing issues
-        pin_memory=False  # Disable pin_memory on CPU
+        num_workers=0,
+        pin_memory=False
     )
     
     val_loader = DataLoader(

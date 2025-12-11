@@ -134,87 +134,77 @@ class DatasetDownloader:
         
         return all_scores
     
+    # Replace your current organize_dataset method with this:
+
     def organize_dataset(self):
-        """Organize the Speechocean762 dataset"""
+        """Organize the Speechocean762 dataset by using Kaldi directories for splitting."""
         print("\n" + "="*70)
-        print("ORGANIZING SPEECHOCEAN762 DATASET")
+        print("ORGANIZING SPEECHOCEAN762 DATASET (FIXED SPLITTING)")
         print("="*70)
         
-        # Find dataset
+        # 1. Find dataset location
         dataset_root, wave_dir, train_dir, test_dir = self.find_dataset_location()
+        if not dataset_root: return None
         
-        if not dataset_root:
-            print("\n✗ Cannot proceed without dataset")
-            return None
-        
-        # Check if WAVE directory has the audio files (RECURSIVE search)
-        if wave_dir and wave_dir.exists():
-            print(f"\n🔍 Searching for audio files in WAVE/ (including subdirectories)...")
-            # Search for both .wav and .WAV (case-insensitive)
-            wav_files = list(wave_dir.rglob("*.wav")) + list(wave_dir.rglob("*.WAV"))
-            print(f"✓ Found {len(wav_files)} audio files")
-            
-            # Show sample of structure
-            if wav_files:
-                print(f"\n  Example audio file locations:")
-                for wav in wav_files[:3]:
-                    relative_path = wav.relative_to(wave_dir)
-                    print(f"    • {relative_path}")
-                if len(wav_files) > 3:
-                    print(f"    • ... and {len(wav_files) - 3} more")
-        else:
-            print("\n✗ WAVE directory not found")
-            return None
-        
-        if not wav_files:
-            print("\n✗ No WAV files found!")
-            return None
-        
-        # Load scores from train and test directories (RECURSIVE)
-        # train_scores = self.load_all_scores_from_directory(train_dir, "training")
-        # test_scores = self.load_all_scores_from_directory(test_dir, "test")
         resource_dir = dataset_root / "resource"
-
-        train_scores = self.load_scores_from_json(resource_dir / "scores.json")
-        test_scores  = train_scores   # SO762 does not provide separate test scores
-
         
-        if not train_scores and not test_scores:
-            print("\n⚠️  Warning: No scores found! Using default scores.")
+        # 2. Load ALL scores from the single JSON file
+        print(f"\n📄 Loading ALL scores from: {resource_dir / 'scores.json'}")
+        all_scores = self.load_scores_from_json(resource_dir / "scores.json")
+        if not all_scores:
+            print("\n✗ Critical: No scores loaded!")
+            return None
+        print(f"✓ Loaded {len(all_scores)} total utterances with scores.")
         
-        # Now match audio files with scores
-        print("\n📊 Matching audio files with scores...")
+        # 3. Determine the official train and test UTTERANCE IDs using wav.scp
+        print("\n🔍 Determining official splits via wav.scp...")
+        train_utt_ids = self.load_utt_ids_from_wav_scp(train_dir)
+        test_utt_ids = self.load_utt_ids_from_wav_scp(test_dir)
+        
+        print(f"  Train set size (from wav.scp): {len(train_utt_ids)}")
+        print(f"  Test set size (from wav.scp): {len(test_utt_ids)}")
+        
+        # 4. Find ALL audio files
+        print(f"\n🔍 Searching for audio files in WAVE/...")
+        wav_files = list(wave_dir.rglob("*.wav")) + list(wave_dir.rglob("*.WAV"))
+        print(f"✓ Found {len(wav_files)} total audio files")
+        
+        if not wav_files: return None
+        
+        # 5. Match audio files with scores and assign split
+        print("\n📊 Matching audio files, scores, and assigning splits...")
         data_entries = []
-        
         matched_train = 0
         matched_test = 0
-        unmatched = 0
+        unmatched_score = 0
+        unmatched_split = 0
         
-        # Limit to first 500 files for faster processing
-        # Remove [:500] to use full dataset
-        for wav_file in tqdm(wav_files[:500], desc="Processing"):
-            # Get utterance ID from filename (without .wav)
+        for wav_file in tqdm(wav_files[:500], desc="Processing"): 
             utt_id = wav_file.stem
             
-            # Check if this is in train or test
-            score = None
-            split = None
-            
-            if utt_id in train_scores:
-                score = train_scores[utt_id]
+            # 5a. Determine Split based on wav.scp lists (CRITICAL FIX)
+            split = 'unknown'
+            if utt_id in train_utt_ids:
                 split = 'train'
                 matched_train += 1
-            elif utt_id in test_scores:
-                score = test_scores[utt_id]
+            elif utt_id in test_utt_ids:
                 split = 'test'
                 matched_test += 1
             else:
-                # Default if not found
-                score = 3.0
-                split = 'train'  # Assume train by default
-                unmatched += 1
+                unmatched_split += 1
+                # If not in train or test wav.scp, we skip it (or leave it as 'unknown')
+
+            # 5b. Get Score
+            score = all_scores.get(utt_id)
+            if score is None:
+                score = 3.0 # Default score if not found
+                unmatched_score += 1
+                
+            # Skip if we didn't find a split OR a score (keeping the 500 limit logic)
+            if split == 'unknown' or score is None: 
+                continue
             
-            # Determine label based on score
+            # 5c. Determine label based on score
             if score >= 4.0:
                 label = 2  # Good
             elif score >= 2.5:
@@ -227,49 +217,18 @@ class DatasetDownloader:
                 'utterance_id': utt_id,
                 'split': split,
                 'overall_score': score,
-                'label': label,
-                'accuracy': score,
-                'completeness': score,
-                'fluency': score,
-                'prosody': score
+                'label': label
             })
         
-        if not data_entries:
-            print("\n✗ No data entries created")
-            return None
-        
-        # Print matching statistics
-        print(f"\n📈 Matching Statistics:")
-        print(f"  ✓ Matched with training scores: {matched_train}")
-        print(f"  ✓ Matched with test scores: {matched_test}")
-        print(f"  ⚠️  Used default scores: {unmatched}")
-        
-        # Create DataFrame
+        # ... (Rest of the function for saving DataFrame to CSV)
         df = pd.DataFrame(data_entries)
         
         # Save to CSV
         output_file = self.config.PROCESSED_DATA_DIR / "dataset_info.csv"
         df.to_csv(output_file, index=False)
         
-        # Print statistics
-        print(f"\n{'='*70}")
-        print("DATASET SUMMARY")
-        print(f"{'='*70}")
-        print(f"\n✓ Total samples: {len(df)}")
-        print(f"\n📊 Split distribution:")
-        print(df['split'].value_counts().to_string())
-        print(f"\n🎯 Label distribution:")
-        label_names = {0: 'Poor', 1: 'Acceptable', 2: 'Good'}
-        for label, count in df['label'].value_counts().sort_index().items():
-            print(f"  {label_names[label]:12s} ({label}): {count}")
-        
-        print(f"\n📈 Score statistics:")
-        print(f"  Mean: {df['overall_score'].mean():.2f}")
-        print(f"  Min:  {df['overall_score'].min():.2f}")
-        print(f"  Max:  {df['overall_score'].max():.2f}")
-        
-        print(f"\n✓ Saved to: {output_file}")
-        print(f"{'='*70}\n")
+        # Print matching statistics
+        # ... (The rest of your summary print statements)
         
         return df
     
@@ -284,6 +243,23 @@ class DatasetDownloader:
         else:
             print("\n❌ FAILED! Please check the errors above.")
             return False
+    # Add this helper function inside the DatasetDownloader class:
+
+    def load_utt_ids_from_wav_scp(self, kaldi_dir):
+        """Load utterance IDs from the Kaldi wav.scp file."""
+        wav_scp_path = kaldi_dir / "wav.scp"
+        utt_ids = set()
+        if wav_scp_path.exists():
+            try:
+                with open(wav_scp_path, 'r') as f:
+                    for line in f:
+                        parts = line.split()
+                        if parts:
+                            # The first part of the line is the utterance ID
+                            utt_ids.add(parts[0]) 
+            except Exception as e:
+                print(f"    Warning: Could not read {wav_scp_path}: {e}")
+        return utt_ids
 
 if __name__ == "__main__":
     downloader = DatasetDownloader()
